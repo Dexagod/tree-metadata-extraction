@@ -1,7 +1,7 @@
 import * as RDF from 'rdf-js'
 import * as N3 from 'n3'
 import ns from '../util/NameSpaces'
-import { RelationType, Literal, Collection, Node, Relation, ConditionalImport } from '../util/Util';
+import { RelationType, Literal, Collection, Node, Relation, ConditionalImport, RetentionPolicy } from '../util/Util';
 
 const context = { "@vocab": ns.tree('') }
 
@@ -18,12 +18,16 @@ export async function extractMetadata (quads: RDF.Quad[]) {
   const relationsMetadata = new Map();
 
   for (let id of collectionIds) {
-    const metadata = await extractCollectionMetadata(store, id)
+    const metadata = await extractCollectionData(store, id)
     collectionsMetadata.set(id, metadata)
   }
+  
   for (let id of nodeIds) {
-    const metadata = await extractNodeMetadata(store, id)
-    nodesMetadata.set(id, metadata)
+    const metadata = await extractNodeData(store, id)
+    nodesMetadata.set(id, metadata.node)
+
+    // Set the dummy relations generated for the hydra:next and as:next predicates
+    metadata.relations.map(relation => relationsMetadata.set(relation["@id"], relation))
   }
   for (let id of relationIds) {
     const metadata = await extractRelationMetadata(store, id)
@@ -39,16 +43,27 @@ export async function extractMetadata (quads: RDF.Quad[]) {
  */
 function extractCollectionids(store: N3.Store) {
   let ids: string[] = []
-  // Search for collection ids
+  // Search for collection ids on type
   ids = ids.concat( store.getQuads(null, ns.rdf('type'), ns.tree('Collection'), null).map(quad => quad.subject.id) );
+  ids = ids.concat( store.getQuads(null, ns.rdf('type'), ns.ldes('EventStream'), null).map(quad => quad.subject.id) );
   ids = ids.concat( store.getQuads(null, ns.rdf('type'), ns.hydra('Collection'), null).map(quad => quad.subject.id) );
+  ids = ids.concat( store.getQuads(null, ns.rdf('type'), ns.as('Collection'), null).map(quad => quad.subject.id) );
+  ids = ids.concat( store.getQuads(null, ns.rdf('type'), ns.as('OrderedCollection'), null).map(quad => quad.subject.id) );
+  ids = ids.concat( store.getQuads(null, ns.rdf('type'), ns.dct('Collection'), null).map(quad => quad.subject.id) );
+  ids = ids.concat( store.getQuads(null, ns.rdf('type'), ns.ldp('Container'), null).map(quad => quad.subject.id) );
+
+  // Search for collection ids on view
   ids = ids.concat( store.getQuads(null, ns.tree('view'), null, null).map(quad => quad.subject.id) );
   ids = ids.concat( store.getQuads(null, ns.hydra('view'), null, null).map(quad => quad.subject.id) );
   ids = ids.concat( store.getQuads(null, ns.void('subset'), null, null).map(quad => quad.subject.id) );
-  // Match on dct:isPartOf property -> collection id is object here
+  // reverse view properties
   ids = ids.concat( store.getQuads(null, ns.dct('isPartOf'), null, null).map(quad => quad.object.id) );
+  ids = ids.concat( store.getQuads(null, ns.as('partOf'), null, null).map(quad => quad.object.id) );
+
+  // Search for collection ids on members
   ids = ids.concat( store.getQuads(null, ns.tree('member'), null, null).map(quad => quad.subject.id) );
   ids = ids.concat( store.getQuads(null, ns.hydra('member'), null, null).map(quad => quad.subject.id) );
+  ids = ids.concat( store.getQuads(null, ns.ldp('contains'), null, null).map(quad => quad.subject.id) );
   return Array.from(new Set(ids))
 }
 
@@ -58,11 +73,28 @@ function extractCollectionids(store: N3.Store) {
  */
 function extractNodeIds(store: N3.Store) {
   let ids: string[] = []
-  // Search for node ids
+
+  // Search for node ids on type
   ids = ids.concat( store.getQuads(null, ns.rdf('type'), ns.tree('Node'), null).map(quad => quad.subject.id) );
   ids = ids.concat( store.getQuads(null, ns.rdf('type'), ns.hydra('PartialCollectionView'), null).map(quad => quad.subject.id) );
+  ids = ids.concat( store.getQuads(null, ns.rdf('as'), ns.hydra('CollectionPage'), null).map(quad => quad.subject.id) );
+  ids = ids.concat( store.getQuads(null, ns.rdf('as'), ns.hydra('OrderedCollectionPage'), null).map(quad => quad.subject.id) );
+
+  // Searching on view causes nodes to be displayed that still need to be retrieved form another page
+  // // Search for node ids on view
+  // ids = ids.concat( store.getQuads(null, ns.tree('view'), null, null).map(quad => quad.object.id) );
+  // ids = ids.concat( store.getQuads(null, ns.hydra('view'), null, null).map(quad => quad.object.id) );
+  // ids = ids.concat( store.getQuads(null, ns.void('subset'), null, null).map(quad => quad.object.id) );
+  // // reverse view properties
+  // ids = ids.concat( store.getQuads(null, ns.dct('isPartOf'), null, null).map(quad => quad.subject.id) );
+  // ids = ids.concat( store.getQuads(null, ns.as('partOf'), null, null).map(quad => quad.subject.id) );
+
+  // Search for node ids on their properties
   ids = ids.concat( store.getQuads(null, ns.tree('search'), null, null).map(quad => quad.subject.id) );
   ids = ids.concat( store.getQuads(null, ns.tree('relation'), null, null).map(quad => quad.subject.id) );
+  ids = ids.concat( store.getQuads(null, ns.ldes('retentionPolicy'), null, null).map(quad => quad.subject.id) );
+  ids = ids.concat( store.getQuads(null, ns.hydra('next'), null, null).map(quad => quad.subject.id) );
+  ids = ids.concat( store.getQuads(null, ns.as('next'), null, null).map(quad => quad.subject.id) );
   return Array.from(new Set(ids))
 }
 
@@ -78,7 +110,7 @@ function extractRelationIds(store: N3.Store) {
   return Array.from(new Set(ids))
 }
 
-function extractCollectionMetadata(store: N3.Store, id: string) {
+function extractCollectionData(store: N3.Store, id: string) {
   const c : Collection = { 
     "@context": context,
     "@id": id,
@@ -88,25 +120,37 @@ function extractCollectionMetadata(store: N3.Store, id: string) {
   setField(c, "@type", store.getQuads(id, ns.rdf('type'), null, null).map(quad => quad.object.id));
 
   // Extract view ids
-  setField(c, "view", store.getQuads(id, ns.tree('view'), null, null).map(quad => retrieveBaseObject(store, quad.object)));
-  setField(c, "view", store.getQuads(id, ns.hydra('view'), null, null).map(quad => retrieveBaseObject(store, quad.object)));
-  setField(c, "view", store.getQuads(id, ns.void('subset'), null, null).map(quad => retrieveBaseObject(store, quad.object)));
-  setField(c, "view", store.getQuads(null, ns.dct('isPartOf'), id, null).map(quad => retrieveBaseObject(store, quad.subject)));
+  setField(c, "view", store.getQuads(id, ns.tree('view'), null, null).map(quad => retrieveTerm(store, quad.object)));
+  setField(c, "view", store.getQuads(id, ns.hydra('view'), null, null).map(quad => retrieveTerm(store, quad.object)));
+  setField(c, "view", store.getQuads(id, ns.void('subset'), null, null).map(quad => retrieveTerm(store, quad.object)));
+  // reverse properties
+  setField(c, "view", store.getQuads(null, ns.dct('isPartOf'), id, null).map(quad => retrieveTerm(store, quad.subject)));
+  setField(c, "view", store.getQuads(null, ns.as('partOf'), id, null).map(quad => retrieveTerm(store, quad.subject)));
+  
   // Extract member ids
-  setField(c, "member", store.getQuads(id, ns.tree('member'), null, null).map(quad => retrieveBaseObject(store, quad.object)));
-  setField(c, "member", store.getQuads(id, ns.hydra('member'), null, null).map(quad => retrieveBaseObject(store, quad.object)));
+  setField(c, "member", store.getQuads(id, ns.tree('member'), null, null).map(quad => retrieveTerm(store, quad.object)));
+  setField(c, "member", store.getQuads(id, ns.hydra('member'), null, null).map(quad => retrieveTerm(store, quad.object)));
+  setField(c, "member", store.getQuads(id, ns.as('items'), null, null).map(quad => retrieveTerm(store, quad.object)));
+  setField(c, "member", store.getQuads(id, ns.hydra('contains'), null, null).map(quad => retrieveTerm(store, quad.object)));
 
-
+  // Extract shape objects
   setField(c, "shape", store.getQuads(id, ns.tree('shape'), null, null).map(quad => retrieveFullObject(store, quad.object)));
+  setField(c, "shape", store.getQuads(id, ns.st('validatedBy'), null, null).map(quad => retrieveFullObject(store, quad.object)));
 
   // Extract full import objects
-  setField(c, "import", store.getQuads(id, ns.tree('import'), null, null).map(quad => retrieveFullObject(store, quad.object)));
-  setField(c, "importStream", store.getQuads(id, ns.tree('importStream'), null, null).map(quad => retrieveFullObject(store, quad.object)));
-  setField(c, "conditionalImport", store.getQuads(id, ns.tree('conditionalImport'), null, null).map(quad => extractConditionalImportMetadata(store, quad.object)));
+  setField(c, "import", store.getQuads(id, ns.tree('import'), null, null).map(quad => retrieveTerm(store, quad.object)));
+  setField(c, "importStream", store.getQuads(id, ns.tree('importStream'), null, null).map(quad => retrieveTerm(store, quad.object)));
+  setField(c, "conditionalImport", store.getQuads(id, ns.tree('conditionalImport'), null, null).map(quad => retrieveConditionalImportData(store, quad.object)));
+
+  // Extract totalItems
+  setField(c, "totalItems", store.getQuads(id, ns.hydra('totalItems'), null, null).map(quad => retrieveTerm(store, quad.object)));
+
+  // TODO:: extract additional metadata?
+
   return c;
 }
 
-function extractNodeMetadata(store: N3.Store, id: string) {
+function extractNodeData(store: N3.Store, id: string) {
   const n : Node = { 
     "@context": context,
     "@id": id,
@@ -119,13 +163,24 @@ function extractNodeMetadata(store: N3.Store, id: string) {
   setField(n, "search", store.getQuads(id, ns.tree('search'), null, null).map(quad => retrieveFullObject(store, quad.object)));
   
   // Extract relation ids
-  setField(n, "relation", store.getQuads(id, ns.tree('relation'), null, null).map(quad => retrieveBaseObject(store, quad.object)));
+  setField(n, "relation", store.getQuads(id, ns.tree('relation'), null, null).map(quad => retrieveTerm(store, quad.object)));
+
+  // Extract retentionPolicy
+  setField(n, "retentionPolicy", store.getQuads(id, ns.ldes('retentionPolicy'), null, null).map(quad => retrieveRetentionPolicyData(store, quad.object)));
 
   // Extract full import objects
   setField(n, "import", store.getQuads(id, ns.tree('import'), null, null).map(quad => retrieveFullObject(store, quad.object)));
   setField(n, "importStream", store.getQuads(id, ns.tree('importStream'), null, null).map(quad => retrieveFullObject(store, quad.object)));
-  setField(n, "conditionalImport", store.getQuads(id, ns.tree('conditionalImport'), null, null).map(quad => extractConditionalImportMetadata(store, quad.object)));
-  return n;
+  setField(n, "conditionalImport", store.getQuads(id, ns.tree('conditionalImport'), null, null).map(quad => retrieveConditionalImportData(store, quad.object)));
+
+  // Extract next links
+  let nextQuads = store.getQuads(id, ns.hydra('next'), null, null).concat(store.getQuads(id, ns.as('next'), null, null))
+  let generatedNextDummyRelations = nextQuads.map((quad, index) => createNextDummyRelation(quad.subject.id, quad.object.id, index))
+  
+  setField(n, "relation", generatedNextDummyRelations.map(relation => { return({"@id": relation["@id"] }) }) );
+
+  // TODO:: extract additional metadata?
+  return {node: n, relations: generatedNextDummyRelations};
 }
 
 function extractRelationMetadata(store: N3.Store, id: string) {
@@ -147,17 +202,31 @@ function extractRelationMetadata(store: N3.Store, id: string) {
   setField(r, "value", store.getQuads(id, ns.tree('value'), null, null).map(quad => retrieveFullObject(store, quad.object)));
 
   // Extract node id
-  setField(r, "node", store.getQuads(id, ns.tree('node'), null, null).map(quad => retrieveBaseObject(store, quad.object)));
+  setField(r, "node", store.getQuads(id, ns.tree('node'), null, null).map(quad => retrieveTerm(store, quad.object)));
 
   // Extract full import objects
   setField(r, "import", store.getQuads(id, ns.tree('import'), null, null).map(quad => retrieveFullObject(store, quad.object)));
   setField(r, "importStream", store.getQuads(id, ns.tree('importStream'), null, null).map(quad => retrieveFullObject(store, quad.object)));
-  setField(r, "conditionalImport", store.getQuads(id, ns.tree('conditionalImport'), null, null).map(quad => extractConditionalImportMetadata(store, quad.object)));
+  setField(r, "conditionalImport", store.getQuads(id, ns.tree('conditionalImport'), null, null).map(quad => retrieveConditionalImportData(store, quad.object)));
   return r;
 }
 
+function retrieveRetentionPolicyData(store: N3.Store, term: N3.Term) {
+  const rp : RetentionPolicy = { }
+  if (N3.Util.isNamedNode(term)) { 
+    rp ["@id"] = term.value 
+  }
+  const id = term.id
+  // Extract retention policy data
+  setField(rp, "@type", store.getQuads(id, ns.rdf('type'), null, null).map(quad => quad.object.id));
+  setField(rp, "amount", store.getQuads(id, ns.ldes('amount'), null, null).map(quad => retrieveTerm(store, quad.object)));
+  setField(rp, "versionKey", store.getQuads(id, ns.ldes('versionKey'), null, null).map(quad => retrieveFullObject(store, quad.object)));
+  setField(rp, "path", store.getQuads(id, ns.tree('path'), null, null).map(quad => retrieveFullObject(store, quad.object)));
+  setField(rp, "value", store.getQuads(id, ns.tree('value'), null, null).map(quad => retrieveFullObject(store, quad.object)));
+  return rp
+}
 
-function extractConditionalImportMetadata(store: N3.Store, term: N3.Term) {
+function retrieveConditionalImportData(store: N3.Store, term: N3.Term) {
   const ci : ConditionalImport = { }
   if (N3.Util.isNamedNode(term)) { 
     ci ["@id"] = term.value 
@@ -177,7 +246,7 @@ function extractConditionalImportMetadata(store: N3.Store, term: N3.Term) {
  * @param recursive 
  * @param processedIds 
  */
-function retrieveBaseObject(store: N3.Store, term: N3.Term) {
+function retrieveTerm(store: N3.Store, term: N3.Term) {
   return retrieveFullObject(store, term, false)
 }
 
@@ -205,9 +274,21 @@ function retrieveFullObject(store: N3.Store, term: N3.Term, recursive = true, pr
         return { '@id': term.id }
       }
     default:
-      // We do not process variables in metadata extraction.
+      // We do not process variables in metadata extraction.Literal
       return {};
   } 
+}
+
+function createNextDummyRelation (sourceURI: string, targetURI: string, index:number): Relation {
+  // Generate unique blank Id
+  let id = `_:nextRelation-${index}`
+  const r : Relation = { 
+    "@context": context,
+    "@id": id,
+   }
+  setField(r, "@type", [ns.tree('Relation')] ) ;
+  setField(r, "node", [{"@id": targetURI}] );
+  return r;
 }
 
 /**

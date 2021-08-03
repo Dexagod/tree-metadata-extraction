@@ -25,6 +25,7 @@ async function test(turtleString, result, message) {
 async function evaluateMetadataExtraction(input, result) {
   const extractedMetadataPerType = await extractMetadata(input)
   // Check if output is valid JSONLD
+  console.log(result, extractedMetadataPerType)
   for (let type of ['collections', 'nodes', 'relations']) {
     let extractedMapping = extractedMetadataPerType[type]
     let resultMapping = result[type]
@@ -607,9 +608,13 @@ describe('testing elaborate extraction',
     sensorNodes.set("https://streams.datapiloten.be/sensors?page=1", {
       "@context": context,
       "@id": "https://streams.datapiloten.be/sensors?page=1",
-      "relation": [{
-        "@id": "_:b8_b13"
-      }]
+      "relation": [
+        {
+          "@id": "_:b8_b13"
+        }, {
+          "@id": "_:nextRelation-0"
+        }
+      ]
     })
 
     // blank node ids are required to reference the relevant objects
@@ -627,6 +632,14 @@ describe('testing elaborate extraction',
       "value": [{
         "@type": ns.xsd("dateTime"),
         "@value": "2020-06-30T14:48:52.013Z"
+      }]
+    })
+    sensorRelations.set('_:nextRelation-0', {
+      "@context": context,
+      "@id": "_:nextRelation-0",
+      "@type": [ns.tree("Relation")],
+      "node": [{
+        "@id": "https://streams.datapiloten.be/sensors?page=2"
       }]
     })
 

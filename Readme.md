@@ -39,43 +39,59 @@ for (const relationId of metadata.relations.keys()) {
 In this section, the extracted fields per class are listed.
 In the case an Object is returned, it can have arbitrary fields that are not listed below.
 
-| Object                | Metadata field      | type          |
-|-----------------------|---------------------|---------------|
-| Collection            | @id                 | string
-|                       | @type               | [ string ]
-|                       | view                | [ URI ] # References a Node object
-|                       | member              | [ URI ]
-|                       | shape               | [ object ]
-|                       | import              | [ URI ]
-|                       | importStream        | [ URI ]
-|                       | conditionalImport   | [ ConditionalImport ]
-| Node                  | @id                 | string
-|                       | @type               | [ string ]
-|                       | search              | [ object ]
-|                       | relation            | [ URI ] # References a Relation object
-|                       | import              | [ object ]
-|                       | importStream        | [ object ]
-|                       | conditionalImport   | [ ConditionalImport ]
-| Relation              | @id                 | string
-|                       | @type               | [ string ]
-|                       | remainingItems      | [ Literal ]
-|                       | path                | [ object ]
-|                       | value               | [ object ]
-|                       | node                | [ object ]
-|                       | import              | [ URI ]
-|                       | importStream        | [ URI ]
-|                       | conditionalImport   | [ ConditionalImport ]
-| ConditionalImport     | path                | [ object ]
-|                       | import              | [ URI ]
-|                       | importStream        | [ URI ]
-| Literal               | @value              | [ string ] 
-|                       | @type               | [ string ]
-|                       | @language           | [ string ]
-| URI                   | @id                 | string
-| object                | @id                 | string
-|                       | <span style="color:red">...</span>                | <span style="color:red">[ any ]</span>
+| Object                | Metadata field      | type                  | referenced object type |
+|-----------------------|---------------------|-----------------------|------------------------|
+| Collection            | @id                 | string                |                        |
+|                       | @type               | [ string ]            |                        |
+|                       | view                | [ URI ]               | Node                   |
+|                       | member              | [ URI ]               | Member                 |
+|                       | shape               | [ Shape ]             |                        |
+|                       | totalItems          | [ Literal ]           |                        |
+|                       | import              | [ URI ]               |                        |
+|                       | importStream        | [ URI ]               |                        |
+|                       | conditionalImport   | [ ConditionalImport ] |                        |
+|                       | ...                 | [ any ]               |                        |
+| Node                  | @id                 | string                |                        |
+|                       | @type               | [ string ]            |                        |
+|                       | relation            | [ URI ]               | Relation               |
+|                       | search              | [ object ]            |                        |
+|                       | retentionPolicy     | [ RetentionPolicy ]   |                        |
+|                       | import              | [ object ]            |                        |
+|                       | importStream        | [ object ]            |                        |
+|                       | conditionalImport   | [ ConditionalImport ] |                        |
+|                       | ...                 | [ any ]               |                        |
+| Relation              | @id                 | string                |                        |      
+|                       | @type               | [ string ]            |                        |
+|                       | remainingItems      | [ Literal ]           |                        |
+|                       | path                | [ object ]            | shacl:propertyPath     |
+|                       | value               | [ object ]            |                        |
+|                       | node                | [ URI ]               | Node                   |
+|                       | import              | [ URI ]               |                        |
+|                       | importStream        | [ URI ]               |                        |
+|                       | conditionalImport   | [ ConditionalImport ] |                        |
+| Member                | ...                 | [ any ]               |                        |
+| Shape                 | ...                 | [ any ]               | shacl:NodeShape / shex:Shape |
+| IriTemplate           | ...                 | [ any ]               | hydra:IriTemplate      |
+| ConditionalImport     | path                | [ object ]            | shacl:propertyPath     |
+|                       | import              | [ URI ]               |                        |
+|                       | importStream        | [ URI ]               |                        |
+| RetentionPolicy       | @type               | [ string ]            |                        |
+|                       | amount              | [ Literal ]           |                        |
+|                       | versionKey          | [ object ]            |                        |
+|                       | path                | [ object ]            | shacl:propertyPath     |
+|                       | value               | [ object ]            |                        |
+| Literal               | @value              | [ string ]            |                        |
+|                       | @type               | [ string ]            |                        |
+|                       | @language           | [ string ]            |                        |
+| URI                   | @id                 | string                |                        |
+| object                | @id                 | string                |                        |
+|                       | ...                 | [ any ]               |                        |
 
 
+```
+Note: Blank node URIs can be returned as a URI. 
+We expect any additional data used in combination with the extracted metadata to be retrieved from the same rdfjs data factory.
+```
 
 ### Examples
 

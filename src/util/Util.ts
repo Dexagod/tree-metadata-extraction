@@ -12,25 +12,30 @@ export enum RelationType {
 }
 
 export interface Collection {
-  "@context": any,
+  "@context"?: string | object,
   "@id": string,
-  "view"?: any[],
-  "member"?: any[],
-  "shape"?: any[],
-  "import"?: any[],
-  "importStream"?: any[],
-  "conditionalImport"?: any[],
+  "@type"?: string[],
+  "view"?: URI[],
+  "member"?: Member[],
+  "shape"?: Shape[],
+  "totalItems"?: Literal[],
+  "import"?: URI[],
+  "importStream"?: URI[],
+  "conditionalImport"?: ConditionalImport[],
+  [property: string]: any;
 }
 
 export interface Node {
-  "@context": any,
+  "@context"?: string | object,
   "@id": string,
   "@type"?: string[],
-  "search"?: any[],
-  "relation"?: any[],
-  "import"?: any[],
-  "importStream"?: any[],
-  "conditionalImport"?: any[],
+  "relation"?: URI[], // Note hydra:next / as:next links are added as Relations of type tree:relation with the target node as the target of the next relation
+  "search"?: IriTemplate[],
+  "retentionPolicy"?: RetentionPolicy[],
+  "import"?: URI[],
+  "importStream"?: URI[],
+  "conditionalImport"?: ConditionalImport[],
+  [property: string]: any;
 
 }
 
@@ -38,23 +43,51 @@ export interface Relation {
   "@context": any,
   "@id": string,
   "@type"?: string[],
-  "remainingItems"?: any[],
+  "remainingItems"?: Literal[],
   "path"?: any[],
   "value"?: any[],
-  "node"?: any[],
-  "import"?: any[],
-  "importStream"?: any[],
-  "conditionalImport"?: any[],
+  "node"?: URI[],
+  "import"?: URI[],
+  "importStream"?: URI[],
+  "conditionalImport"?: ConditionalImport[],
 }
 
+export interface Member {
+  "@id"?: string,
+  [property: string]: any;
+}
+
+export interface Shape {
+  "@id"?: string,
+  [property: string]: any;
+}
+
+export interface IriTemplate {
+  "@id"?: string,
+  [property: string]: any;
+}
 export interface ConditionalImport {
   "@id"?: string,
   "import"?: any[],
   "importStream"?: any[],
   "conditionalImport"?: any[],
 }
+
+export interface RetentionPolicy {
+  "@id"?: string,
+  "@type"?: string[],
+  "amount"?: Literal[],
+  "versionKey"?: string[],
+  "path"?: any[],
+  "value"?: any[],
+}
+
 export interface Literal {
   "@value": string,
   "@type"?: string,
   "@language"?: string,
+}
+
+export interface URI {
+  "@id": string,
 }

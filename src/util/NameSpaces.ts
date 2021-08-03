@@ -60,6 +60,8 @@ enum aliases {
   dbo = 'http://dbpedia.org/ontology/',
   ex = 'http://example.com/',
   tree = 'https://w3id.org/tree#',
+  ldes = 'https://w3id.org/ldes#',
+  st = 'http://www.w3.org/ns/shapetrees#',
   hydra = 'http://www.w3.org/ns/hydra/core#',
   void = 'http://rdfs.org/ns/void#',
   shacl = 'http://www.w3.org/ns/shacl#',
